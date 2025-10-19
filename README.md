@@ -2,6 +2,22 @@
 
 A high-performance document conversion agent powered by [Docling](https://github.com/DS4SD/docling) that converts technical documents to markdown with smart chunking optimized for RAG pipelines.
 
+## Quick Reference
+
+```bash
+# Convert single document
+doc2md convert document.pdf
+
+# Batch convert directory
+doc2md batch ./documents/
+
+# Custom output location
+doc2md convert paper.pdf -o ./output/
+
+# From any directory
+cd ~/Downloads && doc2md convert file.pdf
+```
+
 ## Features
 
 - **Multi-Format Support**: PDF, DOCX, DOC, PPTX, PPT, XLSX, XLS, HTML, HTM, MD, TXT
@@ -22,27 +38,60 @@ A high-performance document conversion agent powered by [Docling](https://github
 git clone https://github.com/e-krane/tech-doc-scanner.git
 cd tech-doc-scanner
 
-# Install dependencies
+# Install dependencies and the tool
 uv sync
+uv pip install -e .
 
 # Activate the environment
 source .venv/bin/activate  # On Linux/Mac
 # or
 .venv\Scripts\activate  # On Windows
+
+# Verify installation
+doc2md --help
+docling-convert --help
 ```
 
 ### Using pip
 
 ```bash
+# Install in development mode
 pip install -e .
+
+# This creates two commands:
+# - doc2md (short, easy to type)
+# - docling-convert (descriptive name)
 ```
 
+### Global Installation
+
+To make the commands available system-wide (outside virtual environment):
+
+```bash
+# Using pipx (recommended for CLI tools)
+pipx install /path/to/tech-doc-scanner
+
+# Or with pip (not recommended, use virtual env)
+pip install /path/to/tech-doc-scanner
+```
+
+After installation, the `doc2md` and `docling-convert` commands will be available in your PATH.
+
 ## Quick Start
+
+Once installed, you can use the tool from anywhere with the `doc2md` or `docling-convert` commands:
 
 ### Convert a Single Document
 
 ```bash
-python main.py convert document.pdf
+# Using the short command
+doc2md convert document.pdf
+
+# Using the descriptive command
+docling-convert convert document.pdf
+
+# With custom output directory
+doc2md convert document.pdf -o ./output
 ```
 
 This will:
@@ -53,10 +102,28 @@ This will:
 ### Batch Convert Documents
 
 ```bash
-python main.py batch documents/ -o output/
+# Convert all PDFs in a directory
+doc2md batch documents/ -o output/
+
+# With file pattern
+doc2md batch papers/ -p "*.pdf" -o converted/
 ```
 
 Process all PDF files in a directory with progress tracking.
+
+### Navigate and Convert
+
+Navigate to any directory and run:
+
+```bash
+cd ~/Documents/research-papers
+doc2md convert paper.pdf
+# Output will be in ./output/ by default
+
+cd ~/Downloads
+doc2md batch . -p "*.pdf"
+# Converts all PDFs in current directory
+```
 
 ### Python API
 
@@ -185,15 +252,21 @@ result = converter.convert_and_save(Path("document.pdf"))
 
 ## CLI Commands
 
+The tool provides two command names:
+- `doc2md` - Short and memorable
+- `docling-convert` - Descriptive name
+
+Both work identically. Examples below use `doc2md`.
+
 ### Convert Command
 
 Convert a single document to markdown:
 
 ```bash
-python main.py convert [OPTIONS] FILE_PATH
+doc2md convert [OPTIONS] FILE_PATH
 
 Options:
-  -o, --output-dir PATH   Output directory (default: output)
+  -o, --output-dir PATH   Output directory (default: ./output)
   --no-figures           Disable figure extraction
   --profile              Enable performance profiling
   -v, --verbose          Enable verbose logging
@@ -201,10 +274,24 @@ Options:
   --log-file PATH        Log to file
 ```
 
-Example:
+Examples:
 
 ```bash
-python main.py convert research_paper.pdf -o results/ --profile
+# Basic conversion (output to ./output/)
+doc2md convert document.pdf
+
+# Custom output directory
+doc2md convert paper.pdf -o ./results/
+
+# With profiling and verbose logging
+doc2md convert report.pdf -v --profile
+
+# Quiet mode (only errors)
+doc2md convert large-doc.pdf -q
+
+# From any directory
+cd ~/Downloads
+doc2md convert research-paper.pdf
 ```
 
 ### Batch Command
@@ -212,19 +299,30 @@ python main.py convert research_paper.pdf -o results/ --profile
 Process all documents in a directory:
 
 ```bash
-python main.py batch [OPTIONS] INPUT_DIR
+doc2md batch [OPTIONS] INPUT_DIR
 
 Options:
-  -o, --output-dir PATH   Output directory (default: output)
+  -o, --output-dir PATH   Output directory (default: ./output)
   --no-figures           Disable figure extraction
   -p, --pattern TEXT     File pattern to match (default: *.pdf)
   -v, --verbose          Enable verbose logging
 ```
 
-Example:
+Examples:
 
 ```bash
-python main.py batch documents/ -p "*.pdf" -o converted/
+# Convert all PDFs in directory
+doc2md batch documents/
+
+# Custom pattern and output
+doc2md batch papers/ -p "*.pdf" -o converted/
+
+# Batch convert from current directory
+cd ~/Documents/pdfs
+doc2md batch . -o markdown-output/
+
+# With verbose logging
+doc2md batch ./reports -v
 ```
 
 ## Configuration

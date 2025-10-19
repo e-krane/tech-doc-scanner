@@ -13,6 +13,10 @@ dependencies = [
     "pypdf>=6.1.2",
 ]
 
+[project.scripts]
+docling-convert = "src.cli:cli"
+doc2md = "src.cli:cli"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
