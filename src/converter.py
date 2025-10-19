@@ -21,6 +21,11 @@ from .config import ConverterConfig
 
 logger = logging.getLogger(__name__)
 
+# Supported file formats
+DOCLING_FORMATS = {'.pdf', '.docx', '.doc', '.pptx', '.ppt', '.xlsx', '.xls', '.html', '.htm'}
+TEXT_FORMATS = {'.md', '.txt', '.text'}
+ALL_SUPPORTED_FORMATS = DOCLING_FORMATS | TEXT_FORMATS
+
 
 @dataclass
 class ConversionResult:
@@ -144,12 +149,89 @@ class TechDocConverter:
 
         return accelerator
 
-    def convert(self, file_path: Path) -> ConversionResult:
+    def _detect_format(self, file_path: Path) -> str:
+        """
+        Detect document format from file extension.
+
+        Args:
+            file_path: Path to the document
+
+        Returns:
+            Format category: 'docling', 'text', or 'unsupported'
+        """
+        file_ext = file_path.suffix.lower()
+
+        if file_ext in DOCLING_FORMATS:
+            return 'docling'
+        elif file_ext in TEXT_FORMATS:
+            return 'text'
+        else:
+            return 'unsupported'
+
+    def _convert_text_file(self, file_path: Path) -> ConversionResult:
+        """
+        Read text files directly (no conversion needed).
+
+        Args:
+            file_path: Path to text file
+
+        Returns:
+            ConversionResult with file contents
+        """
+        import time
+        start_time = time.time()
+
+        try:
+            # Try UTF-8 first
+            markdown = file_path.read_text(encoding='utf-8')
+        except UnicodeDecodeError:
+            # Fall back to latin-1
+            logger.warning(f"UTF-8 decode failed for {file_path.name}, trying latin-1")
+            try:
+                markdown = file_path.read_text(encoding='latin-1')
+            except Exception as e:
+                error_msg = f"Failed to read text file {file_path.name}: {e}"
+                logger.error(error_msg)
+                return ConversionResult(
+                    markdown="",
+                    docling_doc=None,
+                    file_path=file_path,
+                    success=False,
+                    error=error_msg
+                )
+
+        conversion_time = time.time() - start_time
+
+        logger.info(f"Read text file: {file_path.name} ({conversion_time:.2f}s)")
+
+        return ConversionResult(
+            markdown=markdown,
+            docling_doc=None,  # No DoclingDocument for text files
+            file_path=file_path,
+            success=True,
+            conversion_time=conversion_time,
+            page_count=0
+        )
+
+    def convert(
+        self,
+        file_path: Path,
+        page_range: tuple[int, int] | None = None,
+        max_pages: int | None = None
+    ) -> ConversionResult:
         """
         Convert a document to markdown format.
 
+        Supports:
+        - PDF, DOCX, DOC, PPTX, PPT, XLSX, XLS, HTML, HTM (via Docling)
+        - MD, TXT (direct read)
+
         Args:
             file_path: Path to the document file
+            page_range: Optional tuple (start_page, end_page) to convert only specific pages.
+                       Pages are 1-indexed. Example: (1, 5) converts pages 1-5.
+            max_pages: Optional maximum number of pages to convert from the start.
+                      Example: max_pages=10 converts first 10 pages.
 
         Returns:
             ConversionResult with markdown, DoclingDocument, and metadata
@@ -157,6 +239,16 @@ class TechDocConverter:
         Raises:
             FileNotFoundError: If the file doesn't exist
             Exception: If conversion fails
+
+        Example:
+            # Convert full document
+            result = converter.convert(Path("doc.pdf"))
+
+            # Convert only pages 5-10
+            result = converter.convert(Path("doc.pdf"), page_range=(5, 10))
+
+            # Convert first 5 pages
+            result = converter.convert(Path("doc.pdf"), max_pages=5)
         """
         if not isinstance(file_path, Path):
             file_path = Path(file_path)
@@ -172,23 +264,58 @@ class TechDocConverter:
                 error=error_msg
             )
 
-        logger.info(f"Converting document: {file_path.name}")
+        # Detect format
+        format_type = self._detect_format(file_path)
 
+        if format_type == 'unsupported':
+            error_msg = f"Unsupported file format: {file_path.suffix}"
+            logger.error(error_msg)
+            logger.info(f"Supported formats: {', '.join(sorted(ALL_SUPPORTED_FORMATS))}")
+            return ConversionResult(
+                markdown="",
+                docling_doc=None,
+                file_path=file_path,
+                success=False,
+                error=error_msg
+            )
+
+        logger.info(f"Converting {format_type} document: {file_path.name}")
+
+        # Handle text files directly
+        if format_type == 'text':
+            return self._convert_text_file(file_path)
+
+        # Convert with Docling
         try:
             import time
             start_time = time.time()
 
+            # Prepare conversion parameters
+            convert_kwargs = {}
+
+            if page_range is not None:
+                convert_kwargs['page_range'] = page_range
+                logger.info(f"Converting pages {page_range[0]} to {page_range[1]}")
+            elif max_pages is not None:
+                convert_kwargs['max_num_pages'] = max_pages
+                logger.info(f"Converting first {max_pages} pages")
+
             # Convert document
-            result = self._docling_converter.convert(file_path)
+            result = self._docling_converter.convert(file_path, **convert_kwargs)
 
             # Extract conversion time
             conversion_time = time.time() - start_time
 
             # Get timing info if profiling is enabled
-            if self.config.enable_profiling and hasattr(result, 'timings'):
-                pipeline_time = result.timings.get("pipeline_total", {}).get("times", [])
-                if pipeline_time:
-                    conversion_time = sum(pipeline_time)
+            # Note: Timings structure may vary by Docling version
+            # For now, use the measured time which is more reliable
+            # if self.config.enable_profiling and hasattr(result, 'timings'):
+            #     try:
+            #         pipeline_time = result.timings.get("pipeline_total", {}).get("times", [])
+            #         if pipeline_time:
+            #             conversion_time = sum(pipeline_time)
+            #     except (AttributeError, TypeError):
+            #         pass  # Use measured time as fallback
 
             # Export to markdown
             markdown = result.document.export_to_markdown()
@@ -215,6 +342,12 @@ class TechDocConverter:
         except Exception as e:
             error_msg = f"Conversion failed for {file_path.name}: {e}"
             logger.error(error_msg, exc_info=True)
+
+            # Try fallback to text reading for some formats
+            if file_path.suffix.lower() in {'.html', '.htm', '.md', '.txt'}:
+                logger.info(f"Attempting fallback text read for {file_path.name}")
+                return self._convert_text_file(file_path)
+
             return ConversionResult(
                 markdown="",
                 docling_doc=None,
