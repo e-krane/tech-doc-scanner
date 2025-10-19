@@ -7,12 +7,15 @@ wheels/
 *.egg-info
 
 # Virtual environments
-.venv
+.venv/
 venv/
 ENV/
 
-# Output directories
+# Output directories (all test outputs)
 output/
+output_*/
+custom_output/
+test_path/
 *.md.tmp
 
 # IDE
@@ -43,3 +46,12 @@ htmlcov/
 scratch/
 temp/
 tmp/
+
+# Claude Code configuration (keep in repo but ignore local changes)
+.claude/settings.local.json
+.claude/logs/
+
+# Project planning and research (not needed in production)
+PRPs/
+PLANNING.md
+TASKS.md
